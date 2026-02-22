@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name ="Pract01SD2026" default="javadoc" basedir=".">
+	<!-- Definición de las propiedades del proyecto -->
+  	<property environment="env"/>
+  	<property name="src" value="${basedir}/src"/>
+  	<property name="doc" value="${basedir}/doc"/>
+  	<property name="build" value="${basedir}/build"/>
+
+  	<!--Rutas de los archivos-->
+  	<path id="src.path">
+  		<fileset dir ="${src}" includes="**/*.java"/>
+  	</path>
+	
+  <!-- Rutina de ejecución las funciones a realizar -->
+  <target name="all" depends="iniciar,compilar,javadoc">
+  		<echo message= "Lanzando las tareas" />
+  </target>
+  <!-- Rutina de creación los directorios contenedores -->
+  <target name="iniciar" depends="limpiar">
+    	<mkdir dir="${doc}"/>
+   	 	<mkdir dir="${build}"/>
+  </target>
+  <!-- Rutina de creación de los binarios -->
+  <target name="compilar" depends="iniciar">
+    	<javac srcdir="${src}" destdir="${build}" includeantruntine="true"/>
+  </target>
+ <!-- Rutina para generar la documentación -->
+  <target name="javadoc" depends="iniciar">
+    	<javadoc packagesnames ="*" sourcepath="${src}" destdir="${docs}" />
+  </target>
+  
+	<target name="limpiar">
+	    <delete dir = "${doc}" />
+	    <delete dir = "${build}" />
+	  </target>
+</project>
