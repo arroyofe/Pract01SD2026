@@ -55,6 +55,12 @@ public class ChatServerImpl implements ChatServer {
 	//Diccionario de clientes baneados
 	Map<String,Boolean> cjtoClientesBaneados;
 	
+	// Mensaje de patrocinio
+	private static String pub = "Fernando patrocina el mensaje : ";
+	
+	// Mensaje de error
+	private static String error = "Error I/O";
+	
 	//Logger para la gestión de errores
 	private static final Logger LOGGER = Logger.getLogger(ChatServerImpl.class.getName());
 
@@ -68,26 +74,27 @@ public class ChatServerImpl implements ChatServer {
 		this(DEFAULT_PORT);
 		this.alive=true;
 		this.cjtoClientes = new HashMap<Integer,String>();
-		this. cjtoClientesBaneados = new HashMap<String,Boolean>();
+		this.cjtoClientesBaneados = new HashMap<String,Boolean>();
 		this.cjtoHilosClientes = new HashMap<String,ServerThreadForClient>() ;
 	}
 
 	/**
-	 * Constructor
-	 * 
 	 * Constructor con el puerto como argumento introducido por parámetro
 	 * 
-	 * @param port
-	 * @param alive
+	 * @param port puerto que se usa en el chat
 	 */
 	public ChatServerImpl(int port) {
 		this.port=port;
 		this.alive=true;
 		this.cjtoClientes = new HashMap<Integer,String>();
-		this. cjtoClientesBaneados = new HashMap<String,Boolean>();
+		this.cjtoClientesBaneados = new HashMap<String,Boolean>();
 		this.cjtoHilosClientes = new HashMap<String,ServerThreadForClient>() ;
 	}
 	
+	/**
+	 * Devuelve el siguiente valor de identificación para un usuario
+	 * @return valor de identificación generado
+	 */
 	private synchronized int getNextId() {
 		return ++clientId;
 	}
@@ -95,17 +102,16 @@ public class ChatServerImpl implements ChatServer {
 	@Override
 	public void startup() {
 	
-		// Determinación del puerto
-	//	this.port = DEFAULT_PORT;
-		
+	
 		try {
 			//Creación del socket para el server
 			this.socketServ = new ServerSocket(this.port);
 			
 			//Comunicación de apertura del socket
-			System.out.println("Fernando patrocina el mensaje: Servidor iniciado a las "
-					+ sdf.format(new Date()));
-			System.out.println("Escuchando al puerto: " + port );
+			if (LOGGER.isLoggable(Level.INFO)) {
+				LOGGER.info(pub + "Servidor iniciado a las "+ sdf.format(new Date()));
+				LOGGER.info("Escuchando al puerto: " + port );
+			}
 			
 			//Bucle de gestión de los mensajes de los clientes
 			while (alive) {
@@ -136,7 +142,9 @@ public class ChatServerImpl implements ChatServer {
 		// Parada de los chats de los usuarios
 		for (ServerThreadForClient chat :cjtoHilosClientes.values()) {
 			// Se informa del cierre
-			System.out.println("Se va a cerrar el chat.");
+			if (LOGGER.isLoggable(Level.INFO)) {
+				LOGGER.info(pub + "Se va a cerrar el chat.");
+			}
 			chat.stopChat();
 		}
 		
@@ -147,14 +155,16 @@ public class ChatServerImpl implements ChatServer {
 		try {
 			
 			// Se informa del cierre
-			System.out.println("Se va a apagar el servidor.");
+			if (LOGGER.isLoggable(Level.INFO)) {
+				LOGGER.info(pub + "Se va a apagar el servidor.");
+			}
 			
 			//Cierre del socket
 			socket.close();
 			socketServ.close();
 			
 		}catch(IOException e) {
-			LOGGER.log(Level.SEVERE, "Erreur IO", e);
+			LOGGER.log(Level.SEVERE, error, e);
 		}
 		
 		//Una vez cerrado todo se sale del sistema
@@ -183,12 +193,12 @@ public class ChatServerImpl implements ChatServer {
 			if (orden.equals("ban")&& !cjtoClientesBaneados.containsKey(usuarioBan)) {
 				cjtoClientesBaneados.put(usuarioBan, true);
 				// Solamente para chequear el conjunto de baneados
-				cjtoClientesBaneados.forEach((key, value) -> System.out.println("Cliente baneado clave: " + key + " nick de usuario: " + value));
+				cjtoClientesBaneados.forEach((key, value) -> LOGGER.info(pub + "Cliente baneado clave: " + key + " nick de usuario: " + value));
 
 			} else if (orden.equals("unban") && cjtoClientesBaneados.containsKey(usuarioBan)) {
 				cjtoClientesBaneados.remove(usuarioBan, true);
 				// Solamente para chequearel conjunto de baneados
-				cjtoClientesBaneados.forEach((key, value) -> System.out.println("Cliente baneado clave: " + key + " nick de usuario: " + value));
+				cjtoClientesBaneados.forEach((key, value) -> LOGGER.info(pub + "Cliente baneado clave: " + key + " nick de usuario: " + value));
 			}
 		}
 		// Envío de los mensajes a todos los clientes no baneados
@@ -220,7 +230,7 @@ public class ChatServerImpl implements ChatServer {
 	@Override
 	public void remove(int id) {
 		// Se informa en primer lugar al usuario que se va a cerrar 
-		broadcast(new ChatMessage(id,MessageType.MESSAGE,"Fernando patrocina el mensaje: se va a eliminar el usuario " + id));
+		broadcast(new ChatMessage(id,MessageType.MESSAGE, pub + "Se va a eliminar el usuario " + id));
 		
 		// Se recupera el usuario para cerrarel hilo corresponciente y 
 		// se para el chat del usuario
@@ -242,7 +252,8 @@ public class ChatServerImpl implements ChatServer {
 		
 
 	/**
-	 * @param args
+	 * Método principal de la clase
+	 * @param args argumento del main
 	 */
 	public static void main(String[] args) {
 		// Se lanza el servidor
@@ -268,9 +279,10 @@ public class ChatServerImpl implements ChatServer {
 		//Flujo de salida
 		private ObjectOutputStream out;
 		
+		// Marca de actividad del chat
 		private boolean activo = true;
 		
-
+	
 		/*
 		 * Constructor
 		 * @param id
@@ -284,15 +296,17 @@ public class ChatServerImpl implements ChatServer {
 			
 			//Creación de los streams I/O
 			try {
-				this.in = new ObjectInputStream(socket.getInputStream());
+				
 				this.out = new ObjectOutputStream(socket.getOutputStream());
+				this.out.flush();
+				this.in = new ObjectInputStream(socket.getInputStream());
 				
 			}catch(IOException e) {
-				e.printStackTrace();
+				LOGGER.log(Level.SEVERE, error, e);
 				try {// Si falla se cierra el socket
 					socket.close();
 				} catch (IOException e1) {
-					LOGGER.log(Level.SEVERE, "Erreur IO", e);
+					LOGGER.log(Level.SEVERE, error, e1);
 				}
 			}
 		}
@@ -303,7 +317,7 @@ public class ChatServerImpl implements ChatServer {
 				out.writeObject(mensaje);
 				
 			}catch(IOException e) {
-				LOGGER.log(Level.SEVERE, "Erreur IO", e);
+				LOGGER.log(Level.SEVERE, error, e);
 			}
 			
 		}
@@ -324,90 +338,110 @@ public class ChatServerImpl implements ChatServer {
 		 * 
 		 * espera los mensajes de los clientes y realiza las operaciones correspondientes
 		 */
+		@Override
 		public void run() {
-			
-			try {
-			
-				// Lectura del primer mensaje con el nombre de usuario
-				ChatMessage primerMensaje = (ChatMessage) in.readObject();
-				
-				this.username = primerMensaje.getMessage();
-				
-				String usuario = primerMensaje.getMessage();
-				
-				if (cjtoClientes.containsValue(usuario)) {
-					out.writeObject(new ChatMessage(0,MessageType.LOGOUT,"Ese usuario ya está registrado"));
-				}else {
-					// Se añade la información del nuevo usuario y del hilo
-					this.id = getNextId();
-					cjtoClientes.put(id,usuario);
-					cjtoHilosClientes.put(usuario, this);
-					
-				}
-				
-							
-				//Se informa de la conexión del usuario
-				System.out.println("Fernando patrocina el mensaje : El usuario " + usuario + " con ip " 
-						+ this.socket.getInetAddress().getHostName() +" y con id:" 
-						+ this.id +" se ha conectado a las: " + ChatServerImpl.sdf.format(new Date( ))  );
-				
-				System.out.println("Clientes conectados: "+ cjtoHilosClientes.size());
-				
-				String bienvenida = String.format("Hola " + username + "Tu id es: " + id +
-						"Puedes empezar a chatear");
-				
-				out.writeObject(new ChatMessage(id,MessageType.MESSAGE,bienvenida));
-				
-				
-				//Bucle degestión de los mensajes
-				while(activo) {
-					//Se lee el mensaje del cliente
-					ChatMessage mensaje = (ChatMessage) in.readObject();
-					
-					//Si el cliente envía el mensaje de logout se le desactiv
-					if(mensaje.getType()==MessageType.LOGOUT) {
-						
-						System.out.println("Fernando patrocina el mensaje : " + this.username +" con id:" 
-								+ this.id + " se ha desconectado a las: " + ChatServerImpl.sdf.format(new Date( )));						
-						activo = false;
-						remove(id);
-						
-					}else if(mensaje.getType()==MessageType.SHUTDOWN) {
-						activo = false;//SHUTDOWN no se requiere en la práctica
-						System.out.println("Fernando patrocina el mensaje : " + this.username +" con id:" 
-								+ this.id + " se ha cerrado el servidor a las: " + ChatServerImpl.sdf.format(new Date( )));	
-						System.exit(1);
-					}else { //En caso contrario se publica el mensaje 
-						System.out.println("Fernando patrocina el mensaje : El usuario " + this.username +" con id:" 
-								+ this.id + " ha publicado a las: " + ChatServerImpl.sdf.format(new Date( )));
-						
-						broadcast(mensaje);
-						
-					}
-					
-				}
-				
-			}catch(IOException e) {
-				
-				LOGGER.log(Level.SEVERE, "Erreur IO", e);
-				
-			} catch (ClassNotFoundException e) {
-				
-				LOGGER.log(Level.SEVERE, "Erreur IO", e);
-				
-			}finally {// Se cierra el chat y sus componentes cuanto finaliza el cliente
-				try {
-					in.close();
-					out.close();
-					socket.close();
-				//	chatServer.remove(id);
-				} catch (IOException e) {
-					
-					LOGGER.log(Level.SEVERE, "Erreur IO", e);
-				}		
-			}
-			
+		    try {
+		        inicializarConexion();
+		        gestionarMensajes();
+		    } catch (IOException | ClassNotFoundException e) {
+		        LOGGER.log(Level.SEVERE, error, e);
+		    } finally {
+		        cerrarRecursos();
+		    }
 		}
+		
+		private void inicializarConexion() throws IOException, ClassNotFoundException {
+		    ChatMessage primerMensaje = (ChatMessage) in.readObject();
+		    this.username = primerMensaje.getMessage();
+
+		    if (cjtoClientes.containsValue(username)) {
+		        out.writeObject(new ChatMessage(0, MessageType.LOGOUT,
+		                pub + "Ese usuario ya está registrado"));
+		        return;
+		    }
+
+		    this.id = getNextId();
+		    cjtoClientes.put(id, username);
+		    cjtoHilosClientes.put(username, this);
+
+		    logConexion();
+		    enviarBienvenida();
+		}
+
+		
+		private void logConexion() {
+		    if (LOGGER.isLoggable(Level.INFO)) {
+		        LOGGER.info(String.format(
+		            "%s El usuario %s con ip %s y con id:%s se ha conectado a las: %s",
+		            pub, username, socket.getInetAddress().getHostName(), id,
+		            ChatServerImpl.sdf.format(new Date())
+		        ));
+		        LOGGER.info(pub + "Clientes conectados: " + cjtoHilosClientes.size());
+		    }
+		}
+		
+		private void enviarBienvenida() throws IOException {
+		    String bienvenida = String.format(
+		        "%sHola %s. Tu id es: %s. Puedes empezar a chatear",
+		        pub, username, id
+		    );
+		    out.writeObject(new ChatMessage(id, MessageType.MESSAGE, bienvenida));
+		}
+
+		private void gestionarMensajes() throws IOException, ClassNotFoundException {
+		    while (activo) {
+		        ChatMessage mensaje = (ChatMessage) in.readObject();
+		        procesarMensaje(mensaje);
+		    }
+		}
+
+		private void procesarMensaje(ChatMessage mensaje) throws IOException {
+		    switch (mensaje.getType()) {
+		        case LOGOUT -> procesarLogout();
+		        case SHUTDOWN -> procesarShutdown();
+		        default -> procesarPublicacion(mensaje);
+		    }
+		}
+		
+		private void procesarLogout() {
+		    logEvento("se ha desconectado");
+		    activo = false;
+		    remove(id);
+		}
+		
+		private void procesarShutdown() {
+		    logEvento("ha cerrado el servidor");
+		    activo = false;
+		    System.exit(1);
+		}
+		
+		private void procesarPublicacion(ChatMessage mensaje) throws IOException {
+		    logEvento("ha publicado");
+		    broadcast(mensaje);
+		}
+		
+		private void logEvento(String accion) {
+		    if (LOGGER.isLoggable(Level.INFO)) {
+		        LOGGER.info(String.format(
+		            "%s El usuario %s con id:%s %s a las: %s",
+		            pub, username, id, accion,
+		            ChatServerImpl.sdf.format(new Date())
+		        ));
+		    }
+		}
+		
+		private void cerrarRecursos() {
+		    try {
+		        in.close();
+		        out.close();
+		        socket.close();
+		    } catch (IOException e) {
+		        LOGGER.log(Level.SEVERE, error, e);
+		    }
+		}
+		
+		
+		
 		
 	}
 

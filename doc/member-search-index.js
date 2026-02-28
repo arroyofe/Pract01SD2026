@@ -1,0 +1,1 @@
+memberSearchIndex = [{"p":"es.ubu.lsi.client","c":"ChatClient","l":"disconnect()"},{"p":"es.ubu.lsi.client","c":"ChatClient","l":"sendMessage(ChatMessage)","u":"sendMessage(es.ubu.lsi.common.ChatMessage)"},{"p":"es.ubu.lsi.client","c":"ChatClient","l":"start()"}];updateSearchResults();

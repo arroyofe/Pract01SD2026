@@ -24,10 +24,10 @@ import es.ubu.lsi.common.ChatMessage.*;
 public class ChatClientImpl implements ChatClient {
 	
 	//Puerto por defecto
-	private static int DEFAULT_PORT = 1500;
+	private static int defaultPort = 1500;
 	
 	//Puerto por defecto
-	private static String DEFAULT_HOST= "localhost";
+	private static String defaultHost= "localhost";
 	
 	//Servidor que va a usar el cliente
 	private String server;
@@ -39,7 +39,7 @@ public class ChatClientImpl implements ChatClient {
 	private int port;
 	
 	//
-	private boolean carryOn = true;
+	private volatile boolean carryOn = true;
 	
 	//identificación numérica del cliente
 	private static int id;
@@ -60,23 +60,23 @@ public class ChatClientImpl implements ChatClient {
 	//Hora 
 	private SimpleDateFormat hora = new SimpleDateFormat("HH:mm:ss");
 	
+	// Mensaje de patrocinio
+	private static String pub = "Fernando patrocina el mensaje : ";
+	
+	// Mensaje error
+	private static String error = "Erreur IO";
+	
 	// Logger para seguimiento de errores
 	private static final Logger LOGGER = Logger.getLogger(ChatClientImpl.class.getName());
 
 	/**
-	 * Instantiates a new chat client impl.
-	 *
-	 * @param server the server
-	 * @param username the username
-	 * @param port the port
-	 */
-	/*
 	 * Constructor Crea los datos del chat con todos los datos por parámetro
 	 * 
-	 * @param server
-	 * @param username
-	 * @param port
+	 * @param server servidor
+	 * @param username usuario que se conecta
+	 * @param port puerto de enlace
 	 */
+	@SuppressWarnings("static-access")
 	public ChatClientImpl(String server, String username, int port) {
 		this.server = server;
 		this.username = username;
@@ -87,36 +87,36 @@ public class ChatClientImpl implements ChatClient {
 			out = new ObjectOutputStream(socket.getOutputStream());
 			
 		}catch (IOException e) {
-			LOGGER.log(Level.SEVERE, "Erreur IO", e);
-			System.exit(1);;
+			LOGGER.log(Level.SEVERE, error, e);
+			System.exit(1);
 			
 		}
 	}
 	
-	/*
+	/**
 	 * Constructor Crea los datos del chat con servidor y cliente.
 	 * El puerto se escoge con el valor por defecto
 	 * 
-	 * @param server
-	 * @param username
+	 * @param server servidor del sisteama
+	 * @param username usuario cliente
 	 */
 	public ChatClientImpl(String server, String username) {
-		this(server,username,DEFAULT_PORT);
+		this(server,username,defaultPort);
 		
 	}
 	
-	/*
+	/**
 	 * Constructor Crea los datos del chat con el cliente solamente.
 	 * 
 	 * El puerto y el servidor se escogen con el valor por defecto
 	 * 
-	 * @param username
+	 * @param username usuario del cliente
 	 */
 	public ChatClientImpl(String username) {
-		this(username,DEFAULT_HOST,DEFAULT_PORT);
+		this(username,defaultHost,defaultPort);
 		
 	}
-	/*
+	/**
 	 * Metodo de inicio del chat por parte de un usuario
 	 * 
 	 * @return true si el arranque es correcto y false en caso contrario 
@@ -125,24 +125,28 @@ public class ChatClientImpl implements ChatClient {
 	public boolean start() {
 		try {
 			//Mensaje de bienvenida si la conexión es correcta
-			System.out.println("Fernando patrocina el mensaje: Son las: [" + hora.format(new Date() ) + 
-					"]. Conexión establecida correctamente");
+			LOGGER.log(Level.INFO, "{0} Son las: [{1}]. Conexión establecida correctamente", 
+			           new Object[]{pub, hora.format(new Date())});
 			
 			//Envío del nombre de usuario al servidor
 			ChatMessage mensaje = new ChatMessage(0,MessageType.MESSAGE,username);
 			
 			try {
+				out.flush();
 				in = new ObjectInputStream(socket.getInputStream());
 				sendMessage(mensaje);
 				mensaje = (ChatMessage) in.readObject();
 				
 				// Se actualiza el id con id del servidor
 				id=mensaje.getId();
-				System.out.println("Fernando patrocina el mensaje: Son las: [" + hora.format(new Date() ) + 
-						"]. El id recibido del servidor es: " + id);
+				if (LOGGER.isLoggable(Level.INFO)) {
+					LOGGER.log(Level.INFO, "{0} Son las: [{1}]. El id recibido del servidor es:" + id, 
+					           new Object[]{pub, hora.format(new Date())});
+				}
 				
 				//Se lanza el hilo del cliente
-				new Thread(new ChatClientListener(in)).start();
+				escuchaCliente = new ChatClientListener(in);
+				new Thread(escuchaCliente).start();
 				
 			}catch(IOException | ClassNotFoundException e) {
 				e.getStackTrace();
@@ -158,12 +162,12 @@ public class ChatClientImpl implements ChatClient {
 					case "LOGOUT":
 						sendMessage(new ChatMessage(id,MessageType.LOGOUT,""));
 						carryOn=false;
-						return true;
+						break;
 					
 					case "SHUTDOWN":
 						sendMessage(new ChatMessage(id,MessageType.SHUTDOWN,""));
 						carryOn = false;
-						return true;
+						break;
 					
 					default:
 						sendMessage(new ChatMessage(id,MessageType.MESSAGE,texto));
@@ -182,7 +186,7 @@ public class ChatClientImpl implements ChatClient {
 		return true;
 	}
 	
-	/*
+	/**
 	 * Gestión de mensajes del servidor relativos a cada usuario
 	 * 
 	 * @param mensaje a enviar
@@ -194,13 +198,13 @@ public class ChatClientImpl implements ChatClient {
 		try {
 			out.writeObject (message);
 		}catch (IOException e){
-			LOGGER.log(Level.SEVERE, "Erreur IO", e);
+			LOGGER.log(Level.SEVERE, error, e);
 			disconnect();
 		}
 
 	}
 	
-	/*
+	/**
 	 * Desconexion del cliente
 	 */
 	@Override
@@ -220,19 +224,26 @@ public class ChatClientImpl implements ChatClient {
 			socket.close();
 			
 		}catch(IOException e) {
-			LOGGER.log(Level.SEVERE, "Erreur IO", e);
+			LOGGER.log(Level.SEVERE, error, e);
 		}
 		
 		System.exit(0);
 
 	}
-	
+	/**
+	 * Permite obtener el número de identificación del usuario
+	 * 
+	 * @return id el número de identificación
+	 */
+	@SuppressWarnings("static-access")
 	public int getId() {
 		return this.id;
 	}
 
 	/**
-	 * @param args
+	 * Método main principal
+	 * @param args argumento del main
+	 * @throws IOException en caso de error de entrada:salida
 	 */
 	public static void main(String[] args) throws IOException {
 		// Variables para gestión de los argumentos
@@ -242,15 +253,15 @@ public class ChatClientImpl implements ChatClient {
 		// En función de los parámetros recibidos se actualiza el valor de las variables
 		switch (args.length) {
 		case 1: // Cuando hay solamente un argumento, éste corresponde al usuario
-			server = DEFAULT_HOST; // El servidor será el servidor por defecto
+			server = defaultHost; // El servidor será el servidor por defecto
 			username = args[0]; // El usuario será el que se pase por argumento
-			port=DEFAULT_PORT; // El puerto sera el puerto por defecto
+			port=defaultPort; // El puerto sera el puerto por defecto
 			break;
 
 		case 2: // en este caso se reciben ambos datos
 			server = args[0]; // el servidor en la primera posición
 			username = args[1]; // el usuario en la segunda
-			port=DEFAULT_PORT; // El puerto sera el puerto por defecto
+			port=defaultPort; // El puerto sera el puerto por defecto
 			break;
 			
 		case 3: // en este caso se reciben ambos datos
@@ -260,14 +271,16 @@ public class ChatClientImpl implements ChatClient {
 			break;
 
 		default: // En cualquier otro caso se envia mensaje de advertencia
-			System.out.println("Fernando patrocina el mensaje:"
-					+ "Error. Pasar por parámetos [servidor] (opcional) <usuario> (obligatorio) [puerto] (opcional)");
+			if (LOGGER.isLoggable(Level.INFO)) {
+				LOGGER.info(pub + "Error. Pasar por parámetos [servidor] (opcional) <usuario> (obligatorio) [puerto] (opcional)");
+			}
 			break;
 		}
+		if (LOGGER.isLoggable(Level.INFO)) {
 
-		System.out.println("Fernando patrocina el mensaje: Bienvenido: " + username);
-		System.out.println("Fernando patrocina el mensaje: Conectando al puerto: " + port +
-				" del servidor: " + server);
+			LOGGER.info(pub + "Bienvenido: " + username);
+			LOGGER.info(pub + "Conectando al puerto: " + port + " del servidor: " + server);
+		}
 
 		// Una vez registrados los parámetros se lanza el chat
 		ChatClientImpl cliente = new ChatClientImpl(server, username,port);
@@ -275,15 +288,18 @@ public class ChatClientImpl implements ChatClient {
 		
 
 	}
-	
+	/**
+	 * Clase interna que permite quedar a la escucha de los clientes
+	 */
 	class ChatClientListener implements Runnable{
 		//Variable de Entrada de datos
 		private ObjectInputStream in;
 		
 		// Booleano para saber si el cliente está activo y actuar en consecuencia
+		@SuppressWarnings("unused")
 		private boolean activo=true;
 		
-		/*
+		/**
 		 * Arranca el oyente
 		 * 
 		 * @param in
@@ -294,7 +310,7 @@ public class ChatClientImpl implements ChatClient {
 			activo = true;
 		}
 
-		/*
+		/**
 		 * Para el chat del cliente 
 		 */
 		public void pararChat() {
@@ -303,7 +319,7 @@ public class ChatClientImpl implements ChatClient {
 		}
 		
 		
-		/*
+		/**
 		 * Arranca el chat
 		 */
 		@Override
@@ -318,7 +334,7 @@ public class ChatClientImpl implements ChatClient {
 						
 					} catch (ClassNotFoundException | IOException e) {
 						
-						LOGGER.log(Level.SEVERE, "Erreur IO", e);
+						LOGGER.log(Level.SEVERE, error, e);
 					}
 				}
 		}

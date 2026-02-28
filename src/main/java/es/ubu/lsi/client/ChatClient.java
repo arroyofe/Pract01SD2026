@@ -14,7 +14,7 @@ import es.ubu.lsi.common.ChatMessage;
  */
 public interface ChatClient {
 	
-	/*
+	/**
 	 * Arranca el cliente
 	 * 
 	 * @return true si se ha arrancado y false si no se ha arrancado
@@ -22,14 +22,14 @@ public interface ChatClient {
 	public boolean start();
 	
 	
-	/*
+	/**
 	 * Envia un mensaje del cliente recibido por parámetro
 	 * 
-	 * @param message
+	 * @param message mensaje enviado
 	 */
 	public void sendMessage(ChatMessage message);
 	
-	/*
+	/**
 	 * Desconecta al cliente
 	 */
 	public void disconnect();
