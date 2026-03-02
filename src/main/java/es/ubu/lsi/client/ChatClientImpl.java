@@ -140,8 +140,8 @@ public class ChatClientImpl implements ChatClient {
 				// Se actualiza el id con id del servidor
 				id=mensaje.getId();
 				if (LOGGER.isLoggable(Level.INFO)) {
-					LOGGER.log(Level.INFO, "{0} Son las: [{1}]. El id recibido del servidor es:" + id, 
-					           new Object[]{pub, hora.format(new Date())});
+					LOGGER.log(Level.INFO, "{0} Son las: [{1}]. El id recibido del servidor es: {2}", 
+					           new Object[]{pub, hora.format(new Date()),id});
 				}
 				
 				//Se lanza el hilo del cliente
@@ -189,7 +189,7 @@ public class ChatClientImpl implements ChatClient {
 	/**
 	 * Gestión de mensajes del servidor relativos a cada usuario
 	 * 
-	 * @param mensaje a enviar
+	 * @param message mensaje a enviar
 	 * 
 	 */
 	@Override
@@ -243,9 +243,8 @@ public class ChatClientImpl implements ChatClient {
 	/**
 	 * Método main principal
 	 * @param args argumento del main
-	 * @throws IOException en caso de error de entrada:salida
 	 */
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) {
 		// Variables para gestión de los argumentos
 		String server = null; // identificación del servidor que se recibe por parámetro
 		String username = null; // identificación del usuario que se recibe por parámetro
@@ -329,8 +328,9 @@ public class ChatClientImpl implements ChatClient {
 				while (carryOn) {
 					ChatMessage mensaje;
 					try {
+						// Recepción del mensaje
 						mensaje = (ChatMessage) in.readObject();
-						System.out.println(mensaje.getMessage());
+						LOGGER.info(mensaje.getMessage());
 						
 					} catch (ClassNotFoundException | IOException e) {
 						

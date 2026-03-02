@@ -61,6 +61,9 @@ public class ChatServerImpl implements ChatServer {
 	// Mensaje de error
 	private static String error = "Error I/O";
 	
+	// Mensaje de error
+	private static String mensusuario = " El usuario ";
+		
 	//Logger para la gestión de errores
 	private static final Logger LOGGER = Logger.getLogger(ChatServerImpl.class.getName());
 
@@ -73,9 +76,9 @@ public class ChatServerImpl implements ChatServer {
 	public ChatServerImpl() {
 		this(DEFAULT_PORT);
 		this.alive=true;
-		this.cjtoClientes = new HashMap<Integer,String>();
-		this.cjtoClientesBaneados = new HashMap<String,Boolean>();
-		this.cjtoHilosClientes = new HashMap<String,ServerThreadForClient>() ;
+		this.cjtoClientes = new HashMap<>();
+		this.cjtoClientesBaneados = new HashMap<>();
+		this.cjtoHilosClientes = new HashMap<>() ;
 	}
 
 	/**
@@ -84,20 +87,13 @@ public class ChatServerImpl implements ChatServer {
 	 * @param port puerto que se usa en el chat
 	 */
 	public ChatServerImpl(int port) {
-		this.port=port;
-		this.alive=true;
-		this.cjtoClientes = new HashMap<Integer,String>();
-		this.cjtoClientesBaneados = new HashMap<String,Boolean>();
-		this.cjtoHilosClientes = new HashMap<String,ServerThreadForClient>() ;
+	    this.port = port;
+	    this.alive = true;
+	    this.cjtoClientes = new HashMap<>();
+	    this.cjtoClientesBaneados = new HashMap<>();
+	    this.cjtoHilosClientes = new HashMap<>();
 	}
 	
-	/**
-	 * Devuelve el siguiente valor de identificación para un usuario
-	 * @return valor de identificación generado
-	 */
-	private synchronized int getNextId() {
-		return ++clientId;
-	}
 	
 	@Override
 	public void startup() {
@@ -289,8 +285,6 @@ public class ChatServerImpl implements ChatServer {
 		 * @param socket
 		 */
 		public ServerThreadForClient( Socket socket) {
-		//	this.id = id;
-		//	this.username = username; 
 			this.socket = socket;
 			this.activo = true;
 			
@@ -310,6 +304,7 @@ public class ChatServerImpl implements ChatServer {
 				}
 			}
 		}
+		
 		
 		public void sendMessage(ChatMessage mensaje) {
 			// Envio de un mensaje
@@ -331,7 +326,13 @@ public class ChatServerImpl implements ChatServer {
 			
 		}
 		
-		
+		/**
+		 * Devuelve el siguiente valor de identificación para un usuario
+		 * @return valor de identificación generado
+		 */
+		private synchronized int getNextId() {
+			return ++clientId;
+		}
 
 		/*
 		 * run tramita los mensajes que vayan llegando
@@ -341,61 +342,100 @@ public class ChatServerImpl implements ChatServer {
 		@Override
 		public void run() {
 		    try {
+		    	// Inicialización de la conexion
 		        inicializarConexion();
+		        
+		        // gestión de los mensajes
 		        gestionarMensajes();
 		    } catch (IOException | ClassNotFoundException e) {
 		        LOGGER.log(Level.SEVERE, error, e);
 		    } finally {
+		    	// cierre de recursos
 		        cerrarRecursos();
 		    }
 		}
 		
+		/**
+		 * Inicializa la conexión en el método run
+		 * @throws IOException
+		 * @throws ClassNotFoundException
+		 */
 		private void inicializarConexion() throws IOException, ClassNotFoundException {
-		    ChatMessage primerMensaje = (ChatMessage) in.readObject();
+		    // Lectura del primer mensaje del cliente
+			ChatMessage primerMensaje = (ChatMessage) in.readObject();
 		    this.username = primerMensaje.getMessage();
-
+		    
+		    // Control de registro del cliente
 		    if (cjtoClientes.containsValue(username)) {
 		        out.writeObject(new ChatMessage(0, MessageType.LOGOUT,
 		                pub + "Ese usuario ya está registrado"));
 		        return;
 		    }
-
+		    
+		    // Se añade la información del nuevo usuario y del hilo
 		    this.id = getNextId();
 		    cjtoClientes.put(id, username);
 		    cjtoHilosClientes.put(username, this);
-
+		    
+		    // Información de la connexión de un nuevo usuario
 		    logConexion();
+		    
+		    // Envío del mensaje de bienvenidsa
 		    enviarBienvenida();
 		}
 
-		
+		/**
+		 * Información que presenta el servidor al iniciar un login un usuario
+		 */
 		private void logConexion() {
+			/* Cuando se trata de la primera conexión se dan las informaciones sobre
+			 * el usuario que se ha conectado, el socket y la hora de conexión
+			 */
 		    if (LOGGER.isLoggable(Level.INFO)) {
 		        LOGGER.info(String.format(
 		            "%s El usuario %s con ip %s y con id:%s se ha conectado a las: %s",
 		            pub, username, socket.getInetAddress().getHostName(), id,
 		            ChatServerImpl.sdf.format(new Date())
 		        ));
+		        // Igualmente se informa de cuántos clientes están conectados en total l
 		        LOGGER.info(pub + "Clientes conectados: " + cjtoHilosClientes.size());
 		    }
 		}
 		
+		/**
+		 * Mensaje de bienvenida que se envía al usuario al conectarse por primera vez
+		 * @throws IOException
+		 */
 		private void enviarBienvenida() throws IOException {
+			// Mensaje
 		    String bienvenida = String.format(
 		        "%sHola %s. Tu id es: %s. Puedes empezar a chatear",
 		        pub, username, id
 		    );
+		    // Envío
 		    out.writeObject(new ChatMessage(id, MessageType.MESSAGE, bienvenida));
 		}
-
+		
+		/**
+		 * Gestiona los mensajes del cliente
+		 * @throws IOException
+		 * @throws ClassNotFoundException
+		 */
 		private void gestionarMensajes() throws IOException, ClassNotFoundException {
 		    while (activo) {
+		    	// Lectura del mensaje del cliente
 		        ChatMessage mensaje = (ChatMessage) in.readObject();
+		        // Se procesa el mensaje del cliente
 		        procesarMensaje(mensaje);
 		    }
 		}
-
-		private void procesarMensaje(ChatMessage mensaje) throws IOException {
+		
+		/**
+		 * Procesamiento del mensaje del cliente
+		 * @param mensaje
+		 * @throws IOException
+		 */
+		private void procesarMensaje(ChatMessage mensaje){
 		    switch (mensaje.getType()) {
 		        case LOGOUT -> procesarLogout();
 		        case SHUTDOWN -> procesarShutdown();
@@ -403,23 +443,40 @@ public class ChatServerImpl implements ChatServer {
 		    }
 		}
 		
+		/**
+		 * Gestión del mensaje de Logout
+		 */
 		private void procesarLogout() {
-		    logEvento("se ha desconectado");
+		    logEvento(pub + mensusuario + id +  " se ha desconectado");
 		    activo = false;
 		    remove(id);
 		}
 		
+		/**
+		 * Gestión del mensaje de Shutdown
+		 */
 		private void procesarShutdown() {
-		    logEvento("ha cerrado el servidor");
+		    logEvento(pub + mensusuario + id + " ha cerrado el servidor");
 		    activo = false;
 		    System.exit(1);
 		}
 		
-		private void procesarPublicacion(ChatMessage mensaje) throws IOException {
-		    logEvento("ha publicado");
+		/**
+		 * Gestión de otros mensajes
+		 * @param mensaje mensaje recibido del cliente
+		 * @throws IOException
+		 */
+		private void procesarPublicacion(ChatMessage mensaje){
+		    
+			logEvento(pub + mensusuario +id + " ha publicado: ");
+		    
 		    broadcast(mensaje);
 		}
 		
+		/**
+		 * Informe sobre la acción llevada a cabo por el cliente
+		 * @param accion acción que ha efectuado el cliente
+		 */
 		private void logEvento(String accion) {
 		    if (LOGGER.isLoggable(Level.INFO)) {
 		        LOGGER.info(String.format(
@@ -430,6 +487,9 @@ public class ChatServerImpl implements ChatServer {
 		    }
 		}
 		
+		/**
+		 * Cierre de los recursos al finalizar
+		 */
 		private void cerrarRecursos() {
 		    try {
 		        in.close();
