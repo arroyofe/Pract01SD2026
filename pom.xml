@@ -41,74 +41,86 @@
   </dependencies>
 
   <build>
-    <plugins>
+  <plugins>
 
-      <!-- Compilación -->
-      <plugin>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
-      </plugin>
+    <!-- Compilación -->
+    <plugin>
+      <artifactId>maven-compiler-plugin</artifactId>
+      <version>3.13.0</version>
+    </plugin>
 
-      <!-- Tests -->
-      <plugin>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.3.0</version>
-        <configuration>
-          <useModulePath>false</useModulePath>
-        </configuration>
-      </plugin>
+    <!-- Tests -->
+    <plugin>
+      <artifactId>maven-surefire-plugin</artifactId>
+      <version>3.3.0</version>
+      <configuration>
+        <useModulePath>false</useModulePath>
+      </configuration>
+    </plugin>
 
-      <!-- JAR ejecutable -->
-      <plugin>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.4.2</version>
-        <configuration>
-          <archive>
-            <manifest>
-              <mainClass>es.ubu.lsi.server.ChatServerImpl</mainClass>
-            </manifest>
-          </archive>
-        </configuration>
-      </plugin>
+    <!-- JAR ejecutable -->
+    <plugin>
+      <artifactId>maven-jar-plugin</artifactId>
+      <version>3.4.2</version>
+      <configuration>
+        <archive>
+          <manifest>
+            <mainClass>es.ubu.lsi.server.ChatServerImpl</mainClass>
+          </manifest>
+        </archive>
+      </configuration>
+    </plugin>
 
-      <!-- Javadoc -->
-      <plugin>
-        <artifactId>maven-javadoc-plugin</artifactId>
-        <version>3.6.3</version>
-      </plugin>
+    <!-- Javadoc -->
+    <plugin>
+      <artifactId>maven-javadoc-plugin</artifactId>
+      <version>3.6.3</version>
+    </plugin>
 
-      <!-- Ejecution -->
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>exec-maven-plugin</artifactId>
-        <version>3.2.0</version>
-        <executions>
-          <execution>
-            <id>server</id>
-            <goals><goal>java</goal></goals>
-            <configuration>
-              <mainClass>es.ubu.lsi.server.ChatServerImpl</mainClass>
-            </configuration>
-          </execution>
-          <execution>
-            <id>client</id>
-            <goals><goal>java</goal></goals>
-            <configuration>
-              <mainClass>es.ubu.lsi.client.ChatClientImpl</mainClass>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-      	<groupId>org.sonarsource.scanner.maven</groupId>
-      	<artifactId>sonar-maven-plugin</artifactId>
-      	<version>4.0.0.4121</version>
-      </plugin>
+    <!-- Exécution (serveur + client générique) -->
+    <plugin>
+      <groupId>org.codehaus.mojo</groupId>
+      <artifactId>exec-maven-plugin</artifactId>
+      <version>3.2.0</version>
 
-    </plugins>
-  </build>
-  <!-- Ejecución automática Tom y Jerry-->
-  <profiles>
+      <executions>
+
+        <!-- Servidor : compila y ejecuta-->
+        <execution>
+          <id>server</id>
+          <phase>compile</phase>
+          <goals><goal>java</goal></goals>
+          <configuration>
+            <mainClass>es.ubu.lsi.server.ChatServerImpl</mainClass>
+          </configuration>
+        </execution>
+
+        <!-- Client genérico (poner args manualmente) -->
+        <execution>
+          <id>client</id>
+          <phase>none</phase>
+          <goals><goal>java</goal></goals>
+          <configuration>
+            <mainClass>es.ubu.lsi.client.ChatClientImpl</mainClass>
+          </configuration>
+        </execution>
+
+      </executions>
+    </plugin>
+
+    <!-- Sonar -->
+    <plugin>
+      <groupId>org.sonarsource.scanner.maven</groupId>
+      <artifactId>sonar-maven-plugin</artifactId>
+      <version>4.0.0.4121</version>
+    </plugin>
+
+  </plugins>
+</build>
+
+<!-- PERFIL CLIENTS : Tom y Jerry -->
+<profiles>
+
   <profile>
     <id>clients</id>
     <build>
@@ -117,8 +129,10 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
           <version>3.2.0</version>
+
           <executions>
 
+            <!-- Cliente Tom -->
             <execution>
               <id>client-tom</id>
               <phase>none</phase>
@@ -131,6 +145,7 @@
               </configuration>
             </execution>
 
+            <!-- Cliente Jerry -->
             <execution>
               <id>client-jerry</id>
               <phase>none</phase>
@@ -148,18 +163,18 @@
       </plugins>
     </build>
   </profile>
-  <!-- Perfil dedicado Sonar para lanzamiento automático-->
+
+  <!-- Perfil Sonar -->
   <profile>
-  <activation>
-  	<activeByDefault>true</activeByDefault>
-  </activation>
-  <id>sonar</id>
-  <properties>
-    <sonar.projectKey>Pract01SD2026</sonar.projectKey>
-    <sonar.host.url>http://localhost:9000</sonar.host.url>
-  </properties>
-</profile>
+    <activation>
+      <activeByDefault>true</activeByDefault>
+    </activation>
+    <id>sonar</id>
+    <properties>
+      <sonar.projectKey>Pract01SD2026</sonar.projectKey>
+      <sonar.host.url>http://localhost:9000</sonar.host.url>
+    </properties>
+  </profile>
 
 </profiles>
-
 </project>
