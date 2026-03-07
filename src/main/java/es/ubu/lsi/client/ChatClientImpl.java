@@ -1,205 +1,217 @@
 /**
  * @author Fernando Arroyo
+ *
  */
 package es.ubu.lsi.client;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.Socket;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Scanner;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Formatter;
-import java.util.logging.LogRecord;
+import java.util.logging.*;
 
 import es.ubu.lsi.common.ChatMessage;
-import es.ubu.lsi.common.ChatMessage.*;
+import es.ubu.lsi.common.ChatMessage.MessageType;
 
 /**
- * Implementa el chat del cliente
+ * Implementación del cliente de chat.
+ * 
+ * Esta clase gestiona:
+ *  - La conexión con el servidor.
+ *  - El envío de mensajes.
+ *  - La recepción de mensajes mediante un hilo interno.
+ *  - La lectura de la entrada del usuario.
+ *  - El cierre ordenado del cliente.
  */
 public class ChatClientImpl implements ChatClient {
 
-	// Puerto por defecto
-	private static final int DEFAULT_PORT = 1500;
+    /**Constante DEFAULT_PORT. 
+     * Valor por defecto del puerto utilizado
+     */
+        private static final int DEFAULT_PORT = 1500;
+    
+    /** Constante DEFAULT_HOST.
+     * Valor por defecto del host.
+     */
+    private static final String DEFAULT_HOST = "localhost";
 
-	// Puerto por defecto
-	private static final String DEFAULT_HOST = "localhost";
+    /**Constante LOGGER. 
+     * Logger para seguimiento de las trazas.
+     */
+    private static final Logger LOGGER = Logger.getLogger(ChatClientImpl.class.getName());
 
-	// Logger para seguimiento de errores
-	private static final Logger LOGGER = Logger.getLogger(ChatClientImpl.class.getName());
-	
-	// Creador del manejador de eventos
-	static {
-		ConsoleHandler handler = new ConsoleHandler();
-		handler.setFormatter(new Formatter() {
-			@Override
-			public String format(LogRecord marca) {
-				if (marca.getParameters() != null) {
+    // Configuración del logger para dar un formato personalizado al mismo.
+    static {
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setFormatter(new Formatter() {
+            @Override
+            public String format(LogRecord marca) {
+                if (marca.getParameters() != null) {
                     return java.text.MessageFormat.format(marca.getMessage(), marca.getParameters()) + "\n";
                 }
+                return marca.getMessage() + "\n";
+            }
+        });
+        LOGGER.setUseParentHandlers(false); //Evita los logs en doble desactivando los parientes
+        LOGGER.addHandler(handler);
+    }
 
-				return marca.getMessage() + "\n";
-			}
-		});
+    /** Variable para almacenar el servidor que se usa. */
+    private final String server;
+    
+    /** Variable que almacena el nombre del usuario. */
+    private final String username;
+    
+    /** Variable que almacena el puerto empleado. */
+    private final int port;
 
-		LOGGER.setUseParentHandlers(false);
-		LOGGER.addHandler(handler);
-	}
+    /** Variable carry on que indica el estado del cliente. */
+    private volatile boolean carryOn = true;
 
-	// Servidor que va a usar el cliente
-	private final String server;
+    /** Variable id con el identificador asignado por el servidor. */
+    private int id;
 
-	// Código de usuario del cliente
-	private final String username;
+    /** Variable in con el stream entrante de comunicación. */
+    private ObjectInputStream in;
+    
+    /** Variable out con el stream entrante de comunicación. */
+    private ObjectOutputStream out;
 
-	// Puerto por el que se comunica el cliente
-	private final int port;
+    /** Variable escucha cliente, listener interno. */
+    private ChatClientListener escuchaCliente;
 
-	//Booleano que indica que la conexión está activa 
-	private volatile boolean carryOn = true;
+    /** Variable socket, representa el socket del cliente. */
+    private Socket socket;
 
-	// identificación numérica del cliente
-	private int id;
+    /** Variable hora con el formato del tiempo para usar en los logs y mensajes. */
+    private final SimpleDateFormat hora = new SimpleDateFormat("HH:mm:ss");
 
-	// Flujo de entrada
-	private ObjectInputStream in;
+    /** Variable hilo entrada que sirve para la lectura de entradas del teclado. */
+    protected Thread hiloEntrada;
+    
+    // Constantes de mensajes evita repetir contenido
+    /** Constant PUB, con el patrocinio de los mensajes. */
+    private static final String PUB = "Fernando patrocina el mensaje : ";
+    
+    /** Constante ERROR con el mensaje de error de entrada y salida. */
+    private static final String ERROR = "Erreur IO";
 
-	// Flujo de salida
-	private ObjectOutputStream out;
-
-	// Variable Listener
-	private ChatClientListener escuchaCliente;
-
-	// Variable socket para la gestión de las conexiones
-	private Socket socket;
-
-	// Hora
-	private SimpleDateFormat hora = new SimpleDateFormat("HH:mm:ss");
-	
-	// hilo separado para la entrada
-	private Thread hiloEntrada;
-
-	// Mensaje de patrocinio
-	private static final String PUB = "Fernando patrocina el mensaje : ";
-
-	// Mensaje error I/O
-	private static final String ERROR = "Erreur IO";
-
-	/**
-	 * Constructor Crea los datos del chat con todos los datos por parámetro
-	 * 
-	 * @param server   servidor
+    /**
+     * Constructor principal. Crea el cliente con todos los datos por parámetro.
+     * 
+     * @param server   servidor usado
 	 * @param username usuario que se conecta
-	 * @param port     puerto de enlace
-	 */
-	public ChatClientImpl(String server, String username, int port) {
-		this.server = server;
-		this.username = username;
-		this.port = port;
+	 * @param port     puerto de enlace utilizado
+     */
+    public ChatClientImpl(String server, String username, int port) {
+        this.server = server;
+        this.username = username;
+        this.port = port;
 
-		try {
-			// Creación del socket
-			this.socket = new Socket(server, port);
-						
-			// Creación del objeto out a enviar
-			out = new ObjectOutputStream(socket.getOutputStream());
-
-		} catch (IOException e) {
-			// Si falla, se informa del fallo y se cierra el proceso
-			LOGGER.log(Level.SEVERE, ERROR, e);
-			carryOn = false;
-		}
-	}
-
-	/**
-	 * Constructor Crea los datos del chat con servidor y cliente. El puerto se
-	 * escoge con el valor por defecto
-	 * 
-	 * @param server   servidor del sisteama
-	 * @param username usuario cliente
-	 */
-	public ChatClientImpl(String server, String username) {
-		this(server, username, DEFAULT_PORT);
-	}
-
-	/**
-	 * Constructor Crea los datos del chat con el cliente solamente.
-	 * 
-	 * El puerto y el servidor se escogen con el valor por defecto
-	 * 
-	 * @param username usuario del cliente
-	 */
-	public ChatClientImpl(String username) {
-		this(DEFAULT_HOST,username, DEFAULT_PORT);
-	}
-
-	/**
-	 * Metodo de inicio del chat por parte de un usuario
-	 * 
-	 * @return true si el arranque es correcto y false en caso contrario
-	 */
-	@Override
-	public boolean start() {
-		// Control de situación de carryOn, si es falso se devuelve false
-		if (!carryOn) return false;
-
-		try {
-				
-			// Si no hay primera conexión del cliente algo ha fallado
-			// y se procede a la desconexión
-			if (!iniciarConexion()) {
-	               disconnect();
-	               return false;
-			}
-	         
-	        // Se arranca el oyente
-	        arrancarOyente();
-	        
-	        // Y se lee el mensaje
-	        //leerEntradaUsuario();
-	        hiloEntrada = new Thread(() -> leerEntradaUsuario());
-	        hiloEntrada.setDaemon(true);
-	        hiloEntrada.start();
-	        
-	     // 🔥 Boucle d’attente : on sort dès que carryOn = false
-	        while (carryOn) {
-	            try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-	        }
-
-	        
-		} finally {
-			// No se hace nada para garantizar la continuidad.Solicitado por Sonar
-			disconnect();
-		}
-
-		return true;
-	}
-	
-	private boolean iniciarConexion() {
         try {
-        	//Primera conexión
-            out.flush();
+            // Conexión al servidor creando un socket
+            socket = new Socket(server, port);
+
+            // Flujo de salida (se crea en primer lugar para evitar deadlocks)
+            out = new ObjectOutputStream(socket.getOutputStream());
+
+        } catch (IOException e) {
+        	// Si falla, se informa del fallo y se cierra el proceso
+            LOGGER.log(Level.SEVERE, ERROR, e);
+            carryOn = false;
+        }
+    }
+    
+    /**
+	 * Constructor. Crea el cliente con servidor y cliente. El puerto se
+	 * escoge con el valor por defecto.
+	 * 
+	 * @param server   servidor del sistema.
+	 * @param username usuario cliente.
+	 */
+    public ChatClientImpl(String server, String username) {
+        this(server, username, DEFAULT_PORT);
+    }
+
+    /**
+	 * Constructor Crea el cliente con el cliente solamente.
+	 * 
+	 * El puerto y el servidor se escogen con el valor por defecto.
+	 * 
+	 * @param username usuario del cliente.
+	 */
+    public ChatClientImpl(String username) {
+        this(DEFAULT_HOST, username, DEFAULT_PORT);
+    }
+
+    /**
+     * Arranca el cliente.
+     * 
+     * @return true si el arranque es correcto y false en caso contrario.
+     */
+    @Override
+    public boolean start() {
+    	// Control para saber si el chat está activo, si no lo está, se sale
+        if (!carryOn) {
+        	return false;
+        }
+
+        try {
+            /* Conexión inicial con el servidor. Si no hay primera conexión del
+             *  cliente algo ha fallado y se procede a la desconexión*/
+            if (!iniciarConexion()) {
+                disconnect();
+                return false;
+            }
+
+            // Se arranca el oyente
+            arrancarOyente();
+
+            // Se arranca la lectura de teclado
+            hiloEntrada = new Thread(this::leerEntradaUsuario);
+            hiloEntrada.setDaemon(true);
+            hiloEntrada.start();
+
+            // Bucle principal, se sale de él en cuanto pasa a inactivo.
+            while (carryOn) {
+                try { Thread.sleep(50); 
+                } catch (InterruptedException e) {
+                	Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+
+        } finally {
+            disconnect();
+        }
+
+        return true;
+    }
+
+    /**
+     * Realiza la primera comunicación con el servidor.
+     * 
+     * @return True si la conexión funciona y False en caso contrario.
+     */
+    private boolean iniciarConexion() {
+        try {
+        	//Primera conexión: se habilita el flujo de entrada
             in = new ObjectInputStream(socket.getInputStream());
 
+            // Se envía nombre de usuario para pedir registro en el chat
             sendMessage(new ChatMessage(0, MessageType.MESSAGE, username));
-            
+
+            // Se recibe el ID asignado por el servidor
             ChatMessage response = (ChatMessage) in.readObject();
             id = Integer.parseInt(response.getMessage());
-            
+
+            // Se recibe el mensaje de bienvenida al chat
             ChatMessage bienvenida = (ChatMessage) in.readObject();
             System.out.println(bienvenida.getMessage());
 
             LOGGER.log(Level.INFO,
                     "{0} Son las: [{1}]. El id creado por el servidor para el usuario {2} es: {3}",
-                    new Object[]{PUB, hora.format(new Date()),username, id});
+                    new Object[]{PUB, hora.format(new Date()), username, id});
 
             return true;
 
@@ -210,233 +222,220 @@ public class ChatClientImpl implements ChatClient {
         }
     }
 
-	
-	/**
-	 * Arranca el Oyente
-	 */
-	private void arrancarOyente() {
-		// Se inicializa el oyente
-		escuchaCliente = new ChatClientListener(in);
+    /**
+     * Arranca el hilo que escucha mensajes del servidor.
+     */
+    private void arrancarOyente() {
+        escuchaCliente = new ChatClientListener(in);
         new Thread(escuchaCliente).start();
-	}
-	
-	/**
-	 * Lee la entrada enviada por el usuario
-	 */
-	private void leerEntradaUsuario() {
-		// Inicialización de la entrada
-		BufferedReader entrada = new BufferedReader(new InputStreamReader(System.in));
+    }
 
-        while (carryOn) {
-        	try {
-        		if(entrada.ready()) {
-        			//Se toma el valor que se va introduciendo por el cliente
-        			String texto = entrada.readLine();
-            
-        			// Se procede según el caso
-        			switch (texto.toUpperCase()) {
-                		case "LOGOUT" -> {// Si es logout se para el chat del cliente
-                			sendMessage(new ChatMessage(id, MessageType.LOGOUT, ""));
-                			carryOn = false;
-                			break;
-                		}
-                		case "SHUTDOWN" -> {// Si es shtudown se para el servidor
-                			sendMessage(new ChatMessage(id, MessageType.SHUTDOWN, ""));
-                			carryOn = false;
-                			break;
-        
-                		} // En caso sontrario se continua normalmente
-                		default -> sendMessage(new ChatMessage(id, MessageType.MESSAGE, texto));
-        			}
-        		}else {
-        			Thread.sleep(50);
-        		}
-        	}catch (Exception e) {
-        		break; // SE interrumpe y se sale inmediatamente
-        	}
+    /**
+     * Lee la entrada del usuario desde consola.
+     */
+    private void leerEntradaUsuario() {
+    	//Inicialización del buffer de entrada
+        BufferedReader entrada = new BufferedReader(new InputStreamReader(System.in));
+
+        while (carryOn) { //Se procede en bucle mientras esté activo.
+            try {
+            	//Si la entrada se encuentra disponible se trata
+                if (entrada.ready()) {
+                	//Se toma el valor que se ha introducido el cliente
+                    String texto = entrada.readLine();
+                    
+                    // Se procede según el caso
+                    switch (texto.toUpperCase()) {
+                    	// Si es logout se para el chat del cliente
+                    	case "LOGOUT" -> {
+                            sendMessage(new ChatMessage(id, MessageType.LOGOUT, ""));
+                            carryOn = false;
+                        }
+                    	
+                    	// Si es shtudown se para el servidor y los otros clientes (si hay)
+                        case "SHUTDOWN" -> {
+                            sendMessage(new ChatMessage(id, MessageType.SHUTDOWN, ""));
+                            carryOn = false;
+                        }
+                        
+                        // En caso sontrario se continua normalmente
+                        default -> sendMessage(new ChatMessage(id, MessageType.MESSAGE, texto));
+                    }
+                // Si no está disponible se da un plazo de espera (necesario  para el cierre)
+                } else {
+                    Thread.sleep(50);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                e.printStackTrace();
+                break;
+            }
+
         }
-		
-	}
+    }
 
+    /**
+     * Envía un mensaje al servidor.
+     * 
+     * @param message mensaje enviado.
+     */
+    @Override
+    public void sendMessage(ChatMessage message) {
+        try {
+        	// Toma el mensaje y lo envía por el stream de salida.
+            out.writeObject(message);
+        } catch (IOException e) {
+        	// Si falla se informa y se desconecta
+            LOGGER.log(Level.SEVERE, ERROR, e);
+            disconnect();
+        }
+    }
 
-	/**
-	 * Gestión de mensajes del servidor relativos a cada usuario
-	 * 
-	 * @param message mensaje a enviar
-	 * 
-	 */
-	@Override
-	public void sendMessage(ChatMessage message) {
+    /**
+     * Cierra el cliente de forma ordenada.
+     */
+    @Override
+    public void disconnect() {
+    	// Se pasa el carriOn a false para indicar el final.
+    	carryOn = false;
+        
+        // Se para el oyente si existe todavía
+        if (escuchaCliente != null) {
+            escuchaCliente.pararChat();
+        }
+        
+        // Se cierran los streams y el socket
+        try {
+            if (out != null) out.close();
+            if (in != null) in.close();
+            if (socket != null && !socket.isClosed()) socket.close();
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, ERROR, e);
+        }
+    }
 
-		try {
-			out.writeObject(message);
-		// Si falla se informa y se desconecta
-		} catch (IOException e) {
-			LOGGER.log(Level.SEVERE, ERROR, e);
-			disconnect();
-		}
+    /**
+     * Devuelve el id.
+     *
+     * @return the id
+     */
+    public int getId() {
+        return id;
+    }
 
-	}
+    // -------------------------------------------------------------------------
+    // -------------------------- CLASE INTERNA --------------------------------
+    // -------------------------------------------------------------------------
+    
+    /**
+     * Clase interna que gestiona la escucha de los clientes y detiene el 
+     * chat cuando es necesario.
+     *
+     * @see ChatClientEvent
+     */
+    class ChatClientListener implements Runnable {
 
-	/**
-	 * Desconexion del cliente
-	 */
-	@Override
-	public void disconnect() {
+        /** Variable in de entrada de datos. */
+        private final ObjectInputStream in;
 
-		// Se pasa el carriOn a false para indicar el final
-		carryOn = false;
+        /**
+         * Instancia un oyente del chat clienter.
+         *
+         * @param in el stream entrante de comunicación
+         */
+        public ChatClientListener(ObjectInputStream in) {
+            this.in = in;
+        }
 
-		// Se para el oyente si existe todavía
-		if (escuchaCliente != null) {
-			escuchaCliente.pararChat();
-		}
+        /**
+         * Detiene el chat.
+         */
+        public void pararChat() {
+            carryOn = false;
+            try { 
+            	in.close(); 
+            } catch (IOException e) {
+            	LOGGER.info(ERROR);
+            }
+        }
 
-		// Se cierran los streams y el socket
-		try {
-			if (out != null)
-				out.close();
-			if (in != null)
-				in.close();
-			if (socket != null && !socket.isClosed()) {
-				socket.close();
-			}
+        /**
+         * Arranca y mantiene el chat mientras esté activo.
+         */
+        @Override
+        public void run() {
+            while (carryOn) {
+                try {
+                	// Se recibe el mensaje entrante.
+                    ChatMessage mensaje = (ChatMessage) in.readObject();
+                    
+                    // En función del tipo de mensaje se toma una acción u otra.
+                    switch (mensaje.getType()) {
+                    	
+                    	// Mensaje normal a ser tratado normalmente, se muestra en consola.
+                        case MESSAGE -> System.out.println(mensaje.getMessage());
+                        
+                        // Mensaje de logout, se informa y se pasa carryOn a false para parar el bucle.
+                        case LOGOUT -> {
+                            System.out.println("Has sido desconectado del servidor.");
+                            carryOn = false;
+                        }
+                        
+                        /* Mensaje de shutdown, se informa, se pasa carryOn a false y si hay 
+                         * un hilo abierto se cierra
+                         */
+                        case SHUTDOWN -> {
+                            System.out.println("El servidor se ha cerrado.");
+                            carryOn = false;
 
-		} catch (IOException e) {
-			LOGGER.log(Level.SEVERE, ERROR, e);
-		}
-	}
+                            if (hiloEntrada != null && hiloEntrada.isAlive()) {
+                                hiloEntrada.interrupt();
+                            }
+                        }
+                    }
 
-	/**
-	 * Permite obtener el número de identificación del usuario
-	 * 
-	 * @return id el número de identificación
-	 */
-	public int getId() {
-		return this.id;
-	}
+                } catch (IOException e) {
+                    break;
+                } catch (ClassNotFoundException e) {
+                    carryOn = false;
+                }
+            }
+        }
+    }
 
-	/**
-	 * Método main principal
-	 * 
-	 * @param args argumento del main
-	 */
-	public static void main(String[] args) {
-		// Variables para gestión de los argumentos
-		String server = DEFAULT_HOST; // identificación del servidor que se recibe por parámetro
-		String username = null; // identificación del usuario que se recibe por parámetro
-		int port = DEFAULT_PORT;
-		// En función de los parámetros recibidos se actualiza el valor de las variables
-		switch (args.length) {
-		
-			// Cuando hay solamente un argumento, éste corresponde al usuario
-			case 1 -> username = args[0]; // El usuario será el que se pase por argumento
-		
-			// en este caso se reciben ambos datos
-			case 2 -> {
-				server = args[0]; // el servidor en la primera posición
-				username = args[1]; // el usuario en la segunda
-			}
-			
-			// en este caso se reciben ambos datos
-			case 3 -> {
-				server = args[0]; // el servidor en la primera posición
-				username = args[1]; // el usuario en la segunda
-				port = Integer.parseInt(args[2]); // El puerto en la tecera
-			}
-
-			// En cualquier otro caso se envia mensaje de advertencia
-			default -> {
-				LOGGER.info(PUB + "Error. Pasar por parámetros [servidor] (opcional) <usuario> (obligatorio) [puerto] (opcional)");
-				return;
-			}
-		}
-		
-		// Una vez registrados los parámetros se lanza el chat
-		ChatClientImpl cliente = new ChatClientImpl(server, username, port);
-		cliente.start();
-
-	}
-
-	// ********************************************************************************
-    // Classe interna para gestión de la escucha de los clientes
-    // ********************************************************************************
-	/**
-	 * Clase interna que permite quedar a la escucha de los clientes
-	 */
-	class ChatClientListener implements Runnable {
-		// Variable de Entrada de datos
-		private final ObjectInputStream in;
-
-		/**
-		 * Arranca el oyente
-		 * 
-		 * @param in
-		 * @param active
-		 */
-		public ChatClientListener(ObjectInputStream in) {
-			this.in = in;
-		}
-
-		/**
-		 * Para el chat del cliente
-		 */
-		public void pararChat() {
-		    carryOn = false;
-		    try {
-		        in.close();   // desbloquea readObject()
-		    } catch (IOException e) {
-		        // ignorar
-		    }
-		}
-
-		/**
-		 * Arranca el chat
-		 */
-		@Override
-		public void run() {
-
-			// Se reciben los mensajes en bucle
-			while (carryOn) {
-
-				try {
-					// Recepción del mensaje
-					ChatMessage mensaje = (ChatMessage) in.readObject();
-					
-					// 🔥 Ajoute ceci :
-		            System.out.println("Type reçu : " + mensaje.getType());
-
-					
-					// En función del tipo de mensaje se realiza una acción
-					switch (mensaje.getType()) {
-						//Mensaje normal
-		               	case MESSAGE -> 
-		               		System.out.println(mensaje.getMessage());
-		               		
-		               	// Mensaje logout
-		               	case LOGOUT -> {
-		               		System.out.println("Has sido desconectado.");
-		                    carryOn = false;
-		                    break;
-		               	}
-		               	
-		               	// Mensaje Shutdown
-		               	case SHUTDOWN -> {
-		                    System.out.println("El servidor se ha cerrado.");
-		                    ChatClientImpl.this.carryOn = false;
-		                    ChatClientImpl.this.hiloEntrada.interrupt();
-		                    break;
-		               	}
-		            }
-				} catch (IOException e) {
-					// Para salir limpiamente en caso de logout
-					break;
-				} catch (ClassNotFoundException e) {
-					// En este es un error grave y se cierra
-					carryOn = false;
-				}
-			}
-		}
-	}
-
+    /**
+     * Método main.
+     *
+     * @param args argumentos eventuales que se usen.
+     */
+    public static void main(String[] args) {
+    	// Variables para gestión de los argumentos
+        String server = DEFAULT_HOST; // Uso del servidor por defecto
+        String username = null;
+        int port = DEFAULT_PORT; // Uso del puerto por defecto
+        
+        // En función de los parámetros recibidos se actualiza el valor de las variables
+        switch (args.length) {
+        	// Cuando hay solamente un argumento, éste corresponde al usuario
+            case 1 -> username = args[0];
+            
+            // Cuando hay dos, el servidor en la primera posición, el usuario en la segunda
+            case 2 -> { server = args[0]; username = args[1]; }
+            
+            // Cuando hay tres, el servidor en la primera, usuario en la segunda y puerto en tercera posición
+            case 3 -> { server = args[0]; username = args[1]; port = Integer.parseInt(args[2]); }
+            
+            // En cualquier otro caso se envia mensaje de advertencia
+            default -> {
+                LOGGER.info(PUB + "Error. Pasar por parámetros [servidor] (opcional) <usuario> (obligatorio) [puerto] (opcional)");
+                return;
+            }
+        }
+        
+        // Una vez registrados los parámetros se lanza el chat
+        ChatClientImpl cliente = new ChatClientImpl(server, username, port);
+        cliente.start();
+    }
 }
